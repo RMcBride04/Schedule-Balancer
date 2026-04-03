@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Peds Onc Schedule Balancer - Offline</title>
+<title>Peds Onc Schedule Balancer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:#0c1117;color:#d1d5db;min-height:100vh}
@@ -177,6 +177,7 @@ function balance(fS, fN, hd, wS, mc) {
     for (const over of overDays) {
       for (const under of underDays) {
         if (over.d === under.d) continue;
+        if (Math.floor(over.d / 7) !== Math.floor(under.d / 7)) continue;
         for (let n = 0; n < b.length; n++) {
           if (fN[n].cat === "leave") continue;
           if (b[n][over.d] !== ON || b[n][under.d] !== OFF) continue;
@@ -562,6 +563,116 @@ function App() {
     doExport(heads, fN, fS, wkrs, wS, cg, mc, sd);
   }, [heads, fN, fS, wkrs, wS, cg, mc, sd]);
 
+  const loadDemo = useCallback(() => {
+    // Real nurse names, categories, charge eligibility
+    const demoFN = [
+      { name: "Adams, Claire", ce: true, cat: "full", prnTarget: 0 },
+      { name: "Baker, Dana", ce: true, cat: "part", prnTarget: 0 },
+      { name: "Chen, Priya", ce: false, cat: "prn", prnTarget: 2 },
+      { name: "Diaz, Maria", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Evans, Sophie", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Foster, Jamie", ce: true, cat: "leave", prnTarget: 0 },
+      { name: "Garcia, Rosa", ce: false, cat: "prn", prnTarget: 7 },
+      { name: "Hill, Natalie", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Ingram, Tess", ce: true, cat: "part", prnTarget: 0 },
+      { name: "Jones, Megan", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Kim, Laura", ce: false, cat: "part", prnTarget: 0 },
+      { name: "Lee, Brooke", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Moore, Jenna", ce: false, cat: "prn", prnTarget: 10 },
+      { name: "Nash, Kelly", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Ortiz, Carmen", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Park, Yuna", ce: true, cat: "leave", prnTarget: 0 },
+      { name: "Reed, Hailey", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Scott, Amber", ce: true, cat: "full", prnTarget: 0 },
+      { name: "Torres, Val", ce: true, cat: "full", prnTarget: 0 },
+      { name: "Vance, Ellie", ce: false, cat: "full", prnTarget: 0 },
+      { name: "Ward, Paige", ce: true, cat: "full", prnTarget: 0 }
+    ];
+    // Intentionally unbalanced: heavy Mon-Wed, light Thu-Sat
+    // Each row is 42 days. Full-time=18 shifts, Part-time=12, PRN=custom, Leave=0
+    const seed = (shifts, unavail) => {
+      const row = Array(TD).fill(OFF);
+      for (const d of shifts) if (d < TD) row[d] = ON;
+      for (const d of (unavail || [])) if (d < TD) row[d] = UNA;
+      return row;
+    };
+    // Cluster most shifts on Mon(1,8,15,22,29,36) Tue(2,9,16,23,30,37) Wed(3,10,17,24,31,38)
+    // Leave Thu/Fri/weekends sparse to create obvious imbalance
+    const demoFS = [
+      // Burns (FT 18): heavy early week
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Davis (PT 12): Mon-Tue heavy
+      seed([1,2,8,9,15,16,22,23,29,30,36,37]),
+      // Desai (PRN 2): just 2 Mon shifts
+      seed([1,8]),
+      // Green (FT 18): Mon-Wed stacked, one unavail
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38], [4,11]),
+      // Hagen (FT 18): similar cluster, some Thu
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,37,38,4,11]),
+      // Harle (Leave): empty
+      seed([]),
+      // Hooper (PRN 7): Mon-Tue only
+      seed([1,2,8,9,15,16,22]),
+      // Jeitz (FT 18): Mon-Wed heavy, one Fri
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,5]),
+      // Linville (PT 12): Mon-Tue
+      seed([1,2,8,9,15,16,22,23,29,30,36,37]),
+      // Madden (FT 18): Mon-Wed cluster
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Maksin (PT 14): heavy Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30]),
+      // McMillian (FT 18): Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Mitchell (PRN 10): Mon-Tue heavy
+      seed([1,2,8,9,15,16,22,23,29,30]),
+      // Nelson (FT 18): Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Patillo (FT 18): Mon-Wed mostly
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Quinn (Leave): empty
+      seed([]),
+      // Reardon (FT 17): Mon-Wed, one Thu, unavail Fri
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37], [5,12,19,26,33,40]),
+      // Rushing (FT 18): Mon-Wed cluster
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Stroud (FT 17): mostly Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37]),
+      // Wilkinson (FT 18): all Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38]),
+      // Wolf (FT 18): all Mon-Wed
+      seed([1,2,3,8,9,10,15,16,17,22,23,24,29,30,31,36,37,38])
+    ];
+    const demoWkrs = [
+      { name: "Blake, Taylor", ce: false },
+      { name: "Cruz, Mia", ce: false },
+      { name: "Dean, Riley", ce: true },
+      { name: "Flynn, Casey", ce: false },
+      { name: "Hayes, Morgan", ce: true },
+      { name: "Klein, Robin", ce: false },
+      { name: "Patel, Sasha", ce: false }
+    ];
+    // Weekender schedules: weekends locked, Byard+Parrish also work Wed(3,10,17,24,31,38)
+    const demoWS = demoWkrs.map((w, i) => {
+      const row = Array.from({ length: TD }, (_, d) => isW(d) ? LCK : OFF);
+      if (i === 0 || i === 6) { // Byard, Parrish: also work Wednesdays
+        for (let wk = 0; wk < WEEKS; wk++) row[wk * 7 + 3] = LCK;
+      }
+      return row;
+    });
+    const demoHeads = [
+      { name: "Head Nurse A", shifts: Array.from({ length: TD }, (_, d) => d % 7 === 1 || d % 7 === 4) }, // Mon+Thu
+      { name: "Head Nurse B", shifts: Array.from({ length: TD }, (_, d) => d % 7 === 2 || d % 7 === 5) } // Tue+Fri
+    ];
+    setFN(demoFN);
+    setFS(demoFS);
+    setWkrs(demoWkrs);
+    setWS(demoWS);
+    setHeads(demoHeads);
+    setMC(demoFN.map(() => 0));
+    setChanges([]);
+    setSD("2026-04-26");
+  }, []);
+
   const addF = useCallback(() => {
     setFN(p => [...p, { name: "Nurse " + (p.length + 1), ce: false, cat: "full", prnTarget: 0 }]);
     setFS(p => [...p, Array(TD).fill(OFF)]);
@@ -656,6 +767,7 @@ function App() {
           <button className="ab" onClick={runExport} style={{ background: "#1f6feb", color: "#fff" }}>📥 Excel</button>
           <button className="ab" onClick={() => setConfirm({ tp: "cycle" })} style={{ background: "#9e6a03", color: "#fff" }}>🔄 New Cycle</button>
           <button className="ab" onClick={() => setManage(!manage)} style={{ background: "#21262d", color: "#8b949e", border: "1px solid #30363d" }}>{manage ? "✕ Close" : "⚙ Staff"}</button>
+          <button className="ab" onClick={loadDemo} style={{ background: "#6e40c9", color: "#fff", border: "1px solid #8b5cf6" }}>🧪 Load Demo</button>
         </div>
       </div>
 
